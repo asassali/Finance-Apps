@@ -2,17 +2,14 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os
 from groq import Groq
-from dotenv import load_dotenv
 from operator import attrgetter
 
-# Load API key securely
-load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# Load API key securely from Streamlit Secrets
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]  # ✅ Correct way to access secrets in Streamlit Cloud
 
 if not GROQ_API_KEY:
-    st.error("🚨 API Key is missing! Set it in Streamlit Secrets or a .env file.")
+    st.error("🚨 API Key is missing! Make sure it's set in Streamlit Secrets.")
     st.stop()
 
 # Streamlit App UI
@@ -72,7 +69,7 @@ if uploaded_file:
     user_prompt = st.text_area("📝 Enter your question for the AI:", "Analyze the cohort retention data and provide key FP&A insights.")
 
     if st.button("🚀 Generate AI Commentary"):
-        client = Groq(api_key=GROQ_API_KEY)
+        client = Groq(api_key=GROQ_API_KEY)  # ✅ Uses the API key correctly from Streamlit Secrets
         response = client.chat.completions.create(
             messages=[
                 {"role": "system", "content": "You are an AI-powered FP&A analyst providing financial insights."},
