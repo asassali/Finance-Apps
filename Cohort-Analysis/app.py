@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+from prophet import Prophet
 import seaborn as sns
 from groq import Groq
 from operator import attrgetter
