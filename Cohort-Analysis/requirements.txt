@@ -1,15 +1,7 @@
 streamlit
 pandas
-numpy
 matplotlib
 prophet
 groq
 python-dotenv
 openpyxl
-streamlit
-pandas
-matplotlib
-seaborn
-groq
-python-dotenv
-openai
