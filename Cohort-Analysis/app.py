@@ -13,73 +13,92 @@ if not GROQ_API_KEY:
     st.stop()
 
 # Streamlit App UI
-st.title("🤖 FP&A AI Agent - SaaS Cohort Analysis")
-st.write("Upload an Excel file, analyze retention rates, and get AI-generated FP&A insights!")
+st.title("🔮 Financial Forecaster - AI-Powered Predictions")
+st.write("Upload an Excel file, select a column for forecasting, and get AI-generated financial insights!")
 
 # File uploader
-uploaded_file = st.file_uploader("📂 Upload your cohort data (Excel format)", type=["xlsx"])
+uploaded_file = st.file_uploader("📂 Upload your financial data (Excel format)", type=["xlsx"])
 
 if uploaded_file:
-    # Read the Excel file
-    sales_data = pd.read_excel(uploaded_file)
-
-    # Convert Date column to datetime
-    sales_data['Date'] = pd.to_datetime(sales_data['Date'])
-
-    # Extract the first purchase month for each customer
-    sales_data['CohortMonth'] = sales_data.groupby('Customer_ID')['Date'].transform('min').dt.to_period('M')
-
-    # Calculate month difference between the purchase date and the cohort month
-    sales_data['PurchaseMonth'] = sales_data['Date'].dt.to_period('M')
-    sales_data['CohortIndex'] = (sales_data['PurchaseMonth'] - sales_data['CohortMonth']).apply(attrgetter('n'))
-
-    # Create a pivot table for cohort analysis
-    cohort_counts = sales_data.pivot_table(index='CohortMonth', columns='CohortIndex', values='Customer_ID', aggfunc='nunique')
-
-    # Calculate retention rates
-    cohort_sizes = cohort_counts.iloc[:, 0]
-    retention_rate = cohort_counts.divide(cohort_sizes, axis=0)
+    # Read the uploaded Excel file
+    df = pd.read_excel(uploaded_file)
 
     # Display data preview
     st.subheader("📊 Data Preview")
-    st.dataframe(sales_data.head())
+    st.dataframe(df.head())
 
-    # Plot retention rate heatmap
-    st.subheader("🔥 Retention Rate Heatmap")
-    plt.figure(figsize=(16, 9))
-    sns.heatmap(retention_rate, annot=True, fmt=".0%", cmap="YlGnBu", linewidths=0.5)
-    plt.title('Cohort Analysis - Retention Rate', fontsize=16)
-    plt.xlabel('Months Since First Purchase', fontsize=12)
-    plt.ylabel('Cohort Month', fontsize=12)
-    plt.tight_layout()
-    st.pyplot(plt)
+    # Select column for forecasting
+    target_column = st.selectbox("📌 Select the column to forecast:", df.columns)
+    
+    # Select categorical column for filtering (if applicable)
+    categorical_columns = df.select_dtypes(include=['object']).columns
+    if len(categorical_columns) > 0:
+        selected_category_column = st.selectbox("🎯 Select a categorical column to filter (Optional):", [None] + list(categorical_columns))
+        if selected_category_column:
+            unique_values = df[selected_category_column].unique()
+            selected_value = st.selectbox(f"🔍 Select value from {selected_category_column}:", unique_values)
+            df = df[df[selected_category_column] == selected_value]
 
-    # Prepare cohort summary for AI
-    cohort_summary = f"""
-    📌 **Cohort Analysis Summary**:
-    - Number of Cohorts: {len(cohort_counts)}
-    - Retention Rate Breakdown:
-    {retention_rate.to_string()}
-    """
+    # User input for forecast length
+    forecast_length = st.slider("⏳ Select the forecast length (days):", min_value=30, max_value=365, value=180)
 
-    # AI Agent Section
-    st.subheader("🤖 AI Agent - FP&A Commentary")
+    if st.button("🚀 Generate Forecast"):
+        # Prepare data for Prophet
+        forecast_data = df.copy()
+        forecast_data = forecast_data.rename(columns={target_column: "y"})
+        forecast_data['ds'] = pd.date_range(start='2022-01-01', periods=len(df), freq='D')
 
-    # User Prompt Input
-    user_prompt = st.text_area("📝 Enter your question for the AI:", "Analyze the cohort retention data and provide key FP&A insights.")
+        # Train Prophet Model
+        model = Prophet(yearly_seasonality=True)
+        model.fit(forecast_data)
 
-    if st.button("🚀 Generate AI Commentary"):
-        client = Groq(api_key=GROQ_API_KEY)  # ✅ Uses the API key correctly from Streamlit Secrets
+        # Create future dates for prediction
+        future = model.make_future_dataframe(periods=forecast_length)
+        forecast = model.predict(future)
+
+        # Display Forecast Data
+        st.subheader("🔍 Forecasted Data Preview")
+        st.dataframe(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
+
+        # Allow user to download forecast results
+        forecast_file_path = "financial_forecast_results.xlsx"
+        forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_excel(forecast_file_path, index=False)
+        st.download_button(label="📥 Download Forecast Data", data=open(forecast_file_path, "rb"), file_name="forecast_results.xlsx")
+
+        # Plot Forecast
+        st.subheader("📈 Forecast Visualization")
+        fig1 = model.plot(forecast)
+        st.pyplot(fig1)
+
+        # Forecast Components
+        st.subheader("📊 Forecast Components")
+        fig2 = model.plot_components(forecast)
+        st.pyplot(fig2)
+
+        # Prepare summary for AI
+        forecast_summary = f"""
+        Financial Forecast Summary:
+        - Forecasted Period: {forecast['ds'].iloc[-forecast_length].strftime('%Y-%m-%d')} to {forecast['ds'].iloc[-1].strftime('%Y-%m-%d')}
+        - Expected Range:
+          - Lower Bound: ${forecast['yhat_lower'].iloc[-forecast_length:].min():,.2f}
+          - Upper Bound: ${forecast['yhat_upper'].iloc[-forecast_length:].max():,.2f}
+        - Average Forecasted Value: ${forecast['yhat'].iloc[-forecast_length:].mean():,.2f}
+        """
+
+        # AI Commentary Section
+        st.subheader("🤖 AI-Generated Strategic Insights")
+
+        client = Groq(api_key=GROQ_API_KEY)
         response = client.chat.completions.create(
             messages=[
-                {"role": "system", "content": "You are an AI-powered FP&A analyst providing financial insights."},
-                {"role": "user", "content": f"The cohort retention analysis is summarized below:\n{cohort_summary}\n{user_prompt}"}
+                {"role": "system", "content": "You are an expert FP&A analyst providing insights on financial forecasts."},
+                {"role": "user", "content": f"The financial forecast is summarized below:\n{forecast_summary}\nPlease provide insights, identify trends, and give strategic recommendations."}
             ],
             model="llama3-8b-8192",
         )
 
         ai_commentary = response.choices[0].message.content
 
-        # Display AI commentary
-        st.subheader("💡 AI-Generated FP&A Insights")
+        # Display AI Commentary
+        st.subheader("💡 AI-Powered Forecast Insights")
         st.write(ai_commentary)
